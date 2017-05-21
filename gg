@@ -1,0 +1,2331 @@
+/*
+ *
+ *  * Copyright (C) 2013 The Android Open Source Project
+ *  *
+ *  * Licensed under the Apache License, Version 2.0 (the "License");
+ *  * you may not use this file except in compliance with the License.
+ *  * You may obtain a copy of the License at
+ *  *
+ *  *      http://www.apache.org/licenses/LICENSE-2.0
+ *  *
+ *  * Unless required by applicable law or agreed to in writing, software
+ *  * distributed under the License is distributed on an "AS IS" BASIS,
+ *  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  * See the License for the specific language governing permissions and
+ *  * limitations under the License.
+ *
+ */
+
+
+package com.putao.ble.paibloks;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothGatt;
+import android.bluetooth.BluetoothGattCallback;
+import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.BluetoothGattDescriptor;
+import android.bluetooth.BluetoothManager;
+import android.bluetooth.BluetoothProfile;
+import android.content.Context;
+import android.os.Bundle;
+import android.os.Environment;
+import android.os.Handler;
+import android.os.SystemClock;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.View.OnTouchListener;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.SeekBar;
+import android.widget.SeekBar.OnSeekBarChangeListener;
+import android.widget.Spinner;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.putao.libqpp.QppApi;
+import com.putao.libqpp.iQppCallback;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+import csh.tiro.cc.aes;
+
+//import android.os.Vibrator;
+
+
+@SuppressLint("ClickableViewAccessibility")
+public class QppActivity extends Activity {
+    public static final String EXTRAS_DEVICE_NAME = "deviceName";
+    public static final String EXTRAS_DEVICE_ADDRESS = "deviceAddress";
+    protected static final String TAG = QppActivity.class.getSimpleName();
+    public static BluetoothGatt mBluetoothGatt = null;
+    /// qpp start
+    protected static String uuidQppService = "0000fee9-0000-1000-8000-00805f9b34fb";
+    protected static String uuidQppCharWrite = "d44bc439-abfd-45a2-b575-925416129600";
+    private static BluetoothAdapter mBluetoothAdapter = null;
+    /*******************************************************************************************************************************
+     * 创建接收  数据线程 与 运行线程
+     ******************************************************************************************************************************/
+    final Handler handlerQppDataRate = new Handler();
+    private final long t1 = 900; //Forward/Backward/Left/Right
+    private final long t2 = 2000; //Forwardback gap
+    private final float t3 = 900;
+    private final float t4 = 4000;
+    private final float t5 = 950;
+    protected boolean qppConfirmFlag;
+    private BluetoothManager mBluetoothManager = null;
+    private boolean dataRecvFlag = false;
+    final Runnable runnableQppDataRate = new Runnable() {
+        public void run() {
+            dataRecvFlag = false;
+        }
+    };
+    private String deviceName;
+    private String deviceAddress;
+    private String mypower;
+    private String mylog;
+    /**
+     * connection state
+     */
+    private boolean mConnected = false;
+    /**
+     * scan all Service ?
+     */
+    private boolean isInitialize = false;
+    /**
+     * Set Flag to stop thread
+     */
+    private volatile boolean mExit = false;
+    /// public
+    private TextView textDeviceName;
+    private TextView textDeviceAddress;
+    private Button button_move_motor_z;
+    private Button button_move_motor_f;
+    private Button button_move_motor_t;
+    private Button button_LR_motor_z;
+    private Button button_LR_motor_f;
+    private Button button_LR_motor_t;
+    private Button button_motor_1_z;
+    private Button button_motor_1_f;
+    private Button button_motor_1_t;
+    private Button button_motor_2_z;
+    private Button button_motor_2_f;
+    private Button button_motor_2_t;
+    private Button button_play;
+    private Button button_stop;
+    private Button button_zt;
+    private Button button_jx;
+    private Button button_get_v;
+    private Button button_set_bat;
+    private Button button_fun_reset;
+    private Button button_sys_reset;
+    private Button buttonfb2;
+    private Button buttonfb3;
+    private Button buttoncircle1;
+    private Button buttoncircle2;
+    private Button overalltestresult;
+
+
+    private SeekBar seekbar_r;
+    private SeekBar seekbar_g;
+    private SeekBar seekbar_b;
+    private SeekBar seekbar_l;
+    //private Spinner sp_bat;
+    private volatile SeekBar seekbar_v;
+    private Spinner sp1;
+    private TextView bat_view;
+    private TextView bat_flag;
+    private TextView Version_s;
+    private TextView Version_h;
+    private TextView rgb_r_v;
+    private TextView rgb_g_v;
+    private TextView rgb_b_v;
+    private TextView rgb_l_v;
+    private TextView rgb_v_v;
+
+
+    private TextView testresultforward;
+    private TextView testresultbackward;
+    private TextView testresultleft;
+    private TextView testresultright;
+    private TextView testresultfb;
+    private TextView testresultcircle;
+    private TextView overalltestPass;
+    private TextView overalltestFail;
+
+
+
+    private EditText edit_text_forward;
+    private EditText edit_text_back;
+    private EditText edit_text_left;
+    private EditText edit_text_right;
+    private EditText edit_text_fb;
+    private EditText edit_text_circle;
+    private EditText edit_text_power;
+    private int led_D_r = 0;
+    private int led_D_g = 0;
+    private int led_D_b = 0; //车头 底盘颜色
+    private int led_D_l = 255;
+    private aes BleKeyIns = new aes();
+    private boolean initialed = false;
+    private boolean qppSendDataState = false;    //连续发送标志
+    private int send_data_end = 0;
+    private byte qppDataSend[] = {0x55, (byte) 0xaa, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // 发送数据的数组
+
+//    private View rootview = this.getWindow().getDecorView();
+
+    final Runnable runnableSend = new Runnable() {
+        private void QppSendNextData() {
+            if (initialed == false) {
+                return;
+            }
+            byte[] qppDataSen = encodeSentData();
+            Log.d(TAG, "this is a good one");
+
+            if (!QppApi.qppSendData(mBluetoothGatt, qppDataSen)) {
+                Log.e(TAG, "send data failed");
+                return;
+            }
+        }
+
+        public void run() {
+            QppSendNextData();
+        }
+    };
+    final Runnable runnableStop = new Runnable() {
+        private void QppSendNextData() {
+            if (initialed == false) {
+                return;
+            }
+            byte[] qppDataSen = encodeSentData();
+            Log.d(TAG, "this is a good one");
+
+            if (!QppApi.qppSendData(mBluetoothGatt, qppDataSen)) {
+                Log.e(TAG, "send data failed");
+                return;
+            }
+        }
+
+        public void run() {
+
+            mExit = true;
+
+            QppSendNextData();
+
+            SystemClock.sleep(300);
+
+            mExit = false;
+        }
+    };
+    /*******************************************************************************************************************************
+     * EditText 监听器
+     ******************************************************************************************************************************/
+
+    private TextWatcher mtextwatcher = new TextWatcher() {
+
+        public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+
+            return;
+        }
+
+        public void onTextChanged(CharSequence s, int start, int before, int count) {
+
+
+            return;
+
+        }
+
+        public void afterTextChanged(Editable s) {
+
+//            int aaa = rootview.findFocus().getId();
+//            Log.d(TAG,String.valueOf(aaa));
+
+            if (edit_text_forward.getText().toString().length() > 0) {
+
+                testresultforward.setText("时间:" + String.valueOf(Long.parseLong(edit_text_forward.getText().toString()) * t3 / 1000) + "s");
+                return;
+            } else {
+
+                testresultforward.setText("时间:        ");
+
+                return;
+
+            }
+
+        }
+    };
+    private TextWatcher btextwatcher = new TextWatcher() {
+
+        public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+
+            return;
+        }
+
+        public void onTextChanged(CharSequence s, int start, int before, int count) {
+
+
+            return;
+
+        }
+
+        public void afterTextChanged(Editable s) {
+
+
+            if (edit_text_back.getText().toString().length() > 0) {
+
+                testresultbackward.setText("时间:" + String.valueOf(Long.parseLong(edit_text_back.getText().toString()) * t3 / 1000) + "s");
+                return;
+            } else {
+
+                testresultbackward.setText("时间:        ");
+
+                return;
+
+            }
+
+        }
+    };
+    private TextWatcher ltextwatcher = new TextWatcher() {
+
+        public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+
+            return;
+        }
+
+        public void onTextChanged(CharSequence s, int start, int before, int count) {
+
+
+            return;
+
+        }
+
+        public void afterTextChanged(Editable s) {
+
+
+            if (edit_text_left.getText().toString().length() > 0) {
+
+                testresultleft.setText("时间:" + String.valueOf(Long.parseLong(edit_text_left.getText().toString()) * t3 / 1000) + "s");
+                return;
+            } else {
+
+                testresultleft.setText("时间:        ");
+
+                return;
+
+            }
+
+        }
+    };
+    private TextWatcher rtextwatcher = new TextWatcher() {
+
+        public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+
+            return;
+        }
+
+        public void onTextChanged(CharSequence s, int start, int before, int count) {
+
+
+            return;
+
+        }
+
+        public void afterTextChanged(Editable s) {
+
+
+            if (edit_text_right.getText().toString().length() > 0) {
+
+                testresultright.setText("时间:" + String.valueOf(Long.parseLong(edit_text_right.getText().toString()) * t3 / 1000) + "s");
+                return;
+            } else {
+
+                testresultright.setText("时间:        ");
+
+                return;
+
+            }
+
+        }
+    };
+    private TextWatcher fbtextwatcher = new TextWatcher() {
+
+        public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+
+            return;
+        }
+
+        public void onTextChanged(CharSequence s, int start, int before, int count) {
+
+
+            return;
+
+        }
+
+        public void afterTextChanged(Editable s) {
+
+
+            if (edit_text_fb.getText().toString().length() > 0) {
+
+                testresultfb.setText("时间:" + String.valueOf(Long.parseLong(edit_text_fb.getText().toString()) * t4 / 1000) + "s");
+                return;
+            } else {
+
+                testresultfb.setText("时间:        ");
+
+                return;
+
+            }
+
+        }
+    };
+
+    /*******************************************************************************************************************************
+     * 创建发送 数据线程 与 运行线程
+     ******************************************************************************************************************************/
+    private TextWatcher ctextwatcher = new TextWatcher() {
+
+        public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+
+            return;
+        }
+
+        public void onTextChanged(CharSequence s, int start, int before, int count) {
+
+
+            return;
+
+        }
+
+        public void afterTextChanged(Editable s) {
+
+
+            if (edit_text_circle.getText().toString().length() > 0) {
+
+                testresultcircle.setText("时间:" + String.valueOf(Long.parseLong(edit_text_circle.getText().toString()) * t5 / 1000) + "s");
+                return;
+            } else {
+
+                testresultcircle.setText("时间:        ");
+
+                return;
+
+            }
+
+        }
+    };
+    private Handler handlersend = new Handler();// 发送数据的线程
+    /*******************************************************************************************************************************
+     * 获取 开发板发过来的数据
+     ******************************************************************************************************************************/
+    private final BluetoothGattCallback mGattCallback = new BluetoothGattCallback() {
+        //-----------------------------------------------
+        //检查蓝牙连接状态
+        @Override
+        public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
+            Log.i(TAG, "onConnectionStateChange : " + status + "  newState : " + newState);
+            if (newState == BluetoothProfile.STATE_CONNECTED)            //如果是连接状态
+            {
+                mBluetoothGatt.discoverServices();                        //则扫描 服务器
+                mConnected = true;                                        //开启连接标志
+            } else if (newState == BluetoothProfile.STATE_DISCONNECTED)        //如果是断开状态
+            {
+                mConnected = false;                                        //关闭连接标志
+                clearHandler(handlerQppDataRate, runnableQppDataRate);    //关闭向开发板读取数据 线程
+                clearHandler(handlersend, runnableSend);                    //关闭向开发板发送数据 线程
+                dataRecvFlag = false;
+                if (qppSendDataState) qppSendDataState = false;            //发送标志清理
+                close();
+            }
+            invalidateOptionsMenu();
+        }
+
+        //-----------------------------------------------
+        //判断是否连接到 开发板
+        @Override
+        public void onServicesDiscovered(BluetoothGatt gatt, int status) {
+            if (QppApi.qppEnable(mBluetoothGatt, uuidQppService, uuidQppCharWrite)) {
+                isInitialize = true;    //连接到开发板
+            } else {
+                isInitialize = false;    //没有连接到开发板
+            }
+        }
+
+        //-----------------------------------------------
+        //Qpp API 更新 特征状态
+        @Override
+        public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
+            QppApi.updateValueForNotification(gatt, characteristic);
+        }
+
+        //-----------------------------------------------
+        // 设置 QPP 下一个通知
+        @Override
+        public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
+            Log.w(TAG, "onDescriptorWrite");
+            QppApi.setQppNextNotify(gatt, true);
+        }
+
+        //-----------------------------------------------
+        // 发送数据，线程延时
+        @Override
+        public void onCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
+            //发送数据为 真
+            if (status == BluetoothGatt.GATT_SUCCESS && qppSendDataState) {
+            /*This is a workaround,20140819,xiesc: it paused with unknown reason on android 4.4.3
+             */
+                if (handlersend != null && runnableSend != null) {
+                    //发送完成
+                    Log.d("lv", "lvxian = send data end");
+                }
+            } else {
+                Log.e(TAG, "Send failed!!!!");
+            }
+        }
+    };
+    private OnTouchListener button_key = new OnTouchListener() {
+        @Override
+        public boolean onTouch(View arg0, MotionEvent arg1) {
+            // TODO Auto-generated method stub
+            if (mConnected == false || isInitialize == false)
+
+                return false;
+            switch (arg0.getId()) {
+                case R.id.button12: //获取版本号
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        //int qmm = sp_bat.getSelectedItemPosition();
+                        qppDataSend[2] = 'G';
+                        qppDataSend[3] = (byte) 0xa2;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 0;
+                        qppDataSend[7] = 0;
+                        qppDataSend[8] = 0;
+                        qppDataSend[9] = 0;
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        if (send_data_end == 0) {
+                            handlersend.post(runnableSend);
+                        }
+                    }
+                    break;
+                case R.id.button9:    //获取电量
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        //int qmm = sp_bat.getSelectedItemPosition();
+                        qppDataSend[2] = 'G';
+                        qppDataSend[3] = (byte) 0xa1;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 0;
+                        qppDataSend[7] = 0;
+                        qppDataSend[8] = 0;
+                        qppDataSend[9] = 0;
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        if (send_data_end == 0) {
+
+                            mypower = refFormatNowDate() + "-power.txt";
+                            Log.d(TAG, "onTouch: KK");
+                            PowerThread kk = new PowerThread();
+
+                            Thread tt = new Thread(kk);
+                            tt.start();
+                        }
+                    }
+                    break;
+                case R.id.button10: //功能复位
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        qppDataSend[2] = 'R';
+                        qppDataSend[3] = (byte) 0xa2;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 2;
+                        qppDataSend[7] = 4;
+                        qppDataSend[8] = 6;
+                        qppDataSend[9] = 8;
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        Log.d("lv", "lvxian fun reset");
+                        if (send_data_end == 0) {
+                            handlersend.post(runnableSend);
+                        }
+
+                        seekbar_r.setProgress(0);
+                        seekbar_g.setProgress(0);
+                        seekbar_b.setProgress(0);
+                        seekbar_l.setProgress(0);
+                        seekbar_v.setProgress(0);
+
+                    }
+                    break;
+                case R.id.button11:// 系统复位
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        qppDataSend[2] = 'R';
+                        qppDataSend[3] = (byte) 0xa1;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 1;
+                        qppDataSend[7] = 3;
+                        qppDataSend[8] = 5;
+                        qppDataSend[9] = 7;
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        Log.d("lv", "lvxian System reset");
+                        if (send_data_end == 0) {
+                            handlersend.post(runnableSend);
+
+                        }
+
+                    }
+                    break;
+
+                case R.id.buttonfb2://前后转
+
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+
+
+                        if (send_data_end == 0) {
+                            Log.d(TAG, "onTouch: KK");
+                            ForwardBackwardThread FB = new ForwardBackwardThread();
+                            Thread Fb = new Thread(FB);
+                            Fb.start();
+
+                        }
+
+                    }
+
+                    break;
+
+
+                case R.id.buttoncircle1://转圈
+
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+
+
+                        if (send_data_end == 0) {
+
+                            Log.d(TAG, "onTouch: KK");
+                            CircleThread CT = new CircleThread();
+                            Thread Ct = new Thread(CT);
+                            Ct.start();
+                        }
+
+                    }
+
+                    break;
+
+
+                case R.id.M1Z://button_move_motor_z = (Button)findViewById(R.id.M1Z) ;前向正转
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+
+                        qppDataSend[2] = 'M';
+                        qppDataSend[3] = (byte) 0xa1;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 0;
+                        qppDataSend[7] = 0;
+                        qppDataSend[8] = (byte) 0xaa;
+                        qppDataSend[9] = (byte) seekbar_v.getProgress();
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        Log.d("lv", "开始点击正转button");
+                        if (send_data_end == 0) {
+
+                            Log.d(TAG, "onTouch: KK");
+                            ForwardThread FT = new ForwardThread();
+
+                            Thread Ft = new Thread(FT);
+                            Ft.start();
+                        }
+                    }
+
+                    break;
+                case R.id.M1F://button_move_motor_f = (Button)findViewById(R.id.M1F) ; 前向反转
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        qppDataSend[2] = 'M';
+                        qppDataSend[3] = (byte) 0xa1;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 0;
+                        qppDataSend[7] = 0;
+                        qppDataSend[8] = (byte) 0x55;
+                        qppDataSend[9] = (byte) seekbar_v.getProgress();
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        Log.d("lv", "lvxian m1f");
+                        if (send_data_end == 0) {
+
+                            Log.d(TAG, "onTouch: KK");
+                            BackwardThread BW = new BackwardThread();
+                            Thread Bw = new Thread(BW);
+                            Bw.start();
+
+                        }
+                    }
+                    break;
+                case R.id.button2:
+                case R.id.button1://button_move_motor_t = (Button)findViewById(R.id.button1)停止
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        qppDataSend[2] = 'M';
+                        qppDataSend[3] = (byte) 0xa1;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 0;
+                        qppDataSend[7] = 0;
+                        qppDataSend[8] = (byte) 0xa5;
+                        qppDataSend[9] = (byte) seekbar_v.getProgress();
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        Log.d("lv", "lvxian tzkaishi");
+                        if (send_data_end == 0) {
+//
+//                            Log.d(TAG, String.valueOf(mExit));
+//                            handlersend.post(runnableStop);
+
+                            StopThread ST = new StopThread();
+                            Thread St = new Thread(ST);
+                            St.start();
+                        }
+                    }
+
+                    break;
+                case R.id.M2Z://button_LR_motor_z = (Button)findViewById(R.id.M2Z) ; 右转
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        qppDataSend[2] = 'M';
+                        qppDataSend[3] = (byte) 0xa2;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 0;
+                        qppDataSend[7] = 0;
+                        qppDataSend[8] = (byte) 0xaa;
+                        qppDataSend[9] = (byte) seekbar_v.getProgress();
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        Log.d("lv", "lvxian m2z");
+                        if (send_data_end == 0) {
+                            Log.d(TAG, "onTouch: KK");
+                            RightThread RR = new RightThread();
+                            Thread Rr = new Thread(RR);
+                            Rr.start();
+                        }
+                    }
+                    break;
+                case R.id.M2F://button_LR_motor_f = (Button)findViewById(R.id.M2F) ;左右反转
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        qppDataSend[2] = 'M';
+                        qppDataSend[3] = (byte) 0xa2;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 0;
+                        qppDataSend[7] = 0;
+                        qppDataSend[8] = (byte) 0x55;
+                        qppDataSend[9] = (byte) seekbar_v.getProgress();
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        Log.d("lv", "lvxian m2f");
+                        if (send_data_end == 0) {
+                            Log.d(TAG, "onTouch: KK");
+                            LeftThread LL = new LeftThread();
+                            Thread Ll = new Thread(LL);
+                            Ll.start();
+                        }
+                    }
+                    break;
+                case R.id.buttonfb3://forwardback stop
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        qppDataSend[2] = 'M';
+                        qppDataSend[3] = (byte) 0xa2;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 0;
+                        qppDataSend[7] = 0;
+                        qppDataSend[8] = (byte) 0xa5;
+                        qppDataSend[9] = (byte) seekbar_v.getProgress();
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        Log.d("lv", "lvxian m2s");
+                        if (send_data_end == 0) {
+                            FBStopThread FBT = new FBStopThread();
+                            Thread FBt = new Thread(FBT);
+                            FBt.start();
+                        }
+                    }
+                    break;
+
+                case R.id.buttoncircle2:
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        qppDataSend[2] = 'M';
+                        qppDataSend[3] = (byte) 0xa2;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 0;
+                        qppDataSend[7] = 0;
+                        qppDataSend[8] = (byte) 0xa5;
+                        qppDataSend[9] = (byte) seekbar_v.getProgress();
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        Log.d("lv", "lvxian m2s");
+                        if (send_data_end == 0) {
+                            CircleStopThread CS = new CircleStopThread();
+                            Thread Cs = new Thread(CS);
+                            Cs.start();
+                        }
+                    }
+                    break;
+                case R.id.M3Z://button_motor_1_z = (Button)findViewById(R.id.M3Z) ;
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        qppDataSend[2] = 'M';
+                        qppDataSend[3] = (byte) 0xa3;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 0;
+                        qppDataSend[7] = 0;
+                        qppDataSend[8] = (byte) 0xaa;
+                        qppDataSend[9] = (byte) seekbar_v.getProgress();
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        Log.d("lv", "lvxian m3z");
+                        if (send_data_end == 0) {
+                            handlersend.post(runnableSend);
+                        }
+                    }
+                    break;
+                case R.id.M3F://button_motor_1_f = (Button)findViewById(R.id.M3F) ;
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        qppDataSend[2] = 'M';
+                        qppDataSend[3] = (byte) 0xa3;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 0;
+                        qppDataSend[7] = 0;
+                        qppDataSend[8] = (byte) 0x55;
+                        qppDataSend[9] = (byte) seekbar_v.getProgress();
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        Log.d("lv", "lvxian m3f");
+                        if (send_data_end == 0) {
+                            handlersend.post(runnableSend);
+                        }
+                    }
+                    break;
+                case R.id.button7://button_motor_1_t = (Button)findViewById(R.id.button7) ;
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        qppDataSend[2] = 'M';
+                        qppDataSend[3] = (byte) 0xa3;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 0;
+                        qppDataSend[7] = 0;
+                        qppDataSend[8] = (byte) 0xa5;
+                        qppDataSend[9] = (byte) seekbar_v.getProgress();
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        Log.d("lv", "lvxian m3s");
+                        if (send_data_end == 0) {
+                            handlersend.post(runnableSend);
+                        }
+                    }
+                    break;
+                case R.id.M4Z://button_motor_2_z = (Button)findViewById(R.id.M4Z) ;
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        qppDataSend[2] = 'M';
+                        qppDataSend[3] = (byte) 0xa4;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 0;
+                        qppDataSend[7] = 0;
+                        qppDataSend[8] = (byte) 0xaa;
+                        qppDataSend[9] = (byte) seekbar_v.getProgress();
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        Log.d("lv", "lvxian m4z");
+                        if (send_data_end == 0) {
+                            handlersend.post(runnableSend);
+                        }
+                    }
+                    break;
+                case R.id.M4F://button_motor_2_f = (Button)findViewById(R.id.M4F) ;
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        qppDataSend[2] = 'M';
+                        qppDataSend[3] = (byte) 0xa4;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 0;
+                        qppDataSend[7] = 0;
+                        qppDataSend[8] = (byte) 0x55;
+                        qppDataSend[9] = (byte) seekbar_v.getProgress();
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        Log.d("lv", "lvxian m4f");
+                        if (send_data_end == 0) {
+                            handlersend.post(runnableSend);
+                        }
+                    }
+                    break;
+                case R.id.button8://button_motor_2_t = (Button)findViewById(R.id.button8) ;
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        qppDataSend[2] = 'M';
+                        qppDataSend[3] = (byte) 0xa4;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 0;
+                        qppDataSend[7] = 0;
+                        qppDataSend[8] = (byte) 0xa5;
+                        qppDataSend[9] = (byte) seekbar_v.getProgress();
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        Log.d("lv", "lvxian m4s");
+                        if (send_data_end == 0) {
+                            handlersend.post(runnableSend);
+                        }
+                    }
+                    break;
+                case R.id.button3://button_play = (Button)findViewById(R.id.button3) ;
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        int qm = sp1.getSelectedItemPosition();
+                        qppDataSend[2] = 'S';
+                        qppDataSend[3] = (byte) 0xa1;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 0;
+                        qppDataSend[7] = 0;
+                        qppDataSend[8] = 0;
+                        qppDataSend[9] = (byte) ((qm + 1) & 0xff);
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        Log.d("lv", "lvxian play");
+                        if (send_data_end == 0) {
+                            handlersend.post(runnableSend);
+                        }
+                    }
+                    break;
+                case R.id.button4://button_stop = (Button)findViewById(R.id.button4) ;
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        int qm = sp1.getSelectedItemPosition();
+                        qppDataSend[2] = 'S';
+                        qppDataSend[3] = (byte) 0xa2;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 0;
+                        qppDataSend[7] = 0;
+                        qppDataSend[8] = 0;
+                        qppDataSend[9] = (byte) ((qm + 1) & 0xff);
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        Log.d("lv", "lvxian stop");
+                        if (send_data_end == 0) {
+                            handlersend.post(runnableSend);
+                        }
+                    }
+                    break;
+                case R.id.button5://button_zt = (Button)findViewById(R.id.button5) ;
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        int qm = sp1.getSelectedItemPosition();
+                        qppDataSend[2] = 'S';
+                        qppDataSend[3] = (byte) 0xa3;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 0;
+                        qppDataSend[7] = 0;
+                        qppDataSend[8] = 0;
+                        qppDataSend[9] = (byte) ((qm + 1) & 0xff);
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        Log.d("lv", "lvxian zt");
+                        if (send_data_end == 0) {
+                            handlersend.post(runnableSend);
+                        }
+                    }
+                    break;
+                case R.id.button6://button_jx = (Button)findViewById(R.id.button6);
+                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {
+                        int qm = sp1.getSelectedItemPosition();
+                        qppDataSend[2] = 'S';
+                        qppDataSend[3] = (byte) 0xa4;
+                        qppDataSend[4] = 0;
+                        qppDataSend[5] = 4;
+                        qppDataSend[6] = 0;
+                        qppDataSend[7] = 0;
+                        qppDataSend[8] = 0;
+                        qppDataSend[9] = (byte) ((qm + 1) & 0xff);
+                        qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                                qppDataSend[3] +
+                                qppDataSend[4] +
+                                qppDataSend[5] +
+                                qppDataSend[6] +
+                                qppDataSend[7] +
+                                qppDataSend[8] +
+                                qppDataSend[9]) % 256));
+                        Log.d("lv", "lvxian jx");
+                        if (send_data_end == 0) {
+                            handlersend.post(runnableSend);
+                        }
+                    }
+                    break;
+
+            }
+            return false;
+        }
+
+    };
+    private OnSeekBarChangeListener seekfun = new OnSeekBarChangeListener() {
+        @Override
+        public void onProgressChanged(SeekBar arg0, int arg1, boolean arg2) {
+            // TODO Auto-generated method stub
+            switch (arg0.getId()) {
+                case R.id.seekBar1:
+                case R.id.seekBar2:
+                case R.id.seekBar3:
+                case R.id.seekBar4:
+                case R.id.seekBar5:
+                    led_D_r = seekbar_r.getProgress();
+                    led_D_g = seekbar_g.getProgress();
+                    led_D_b = seekbar_b.getProgress();
+                    led_D_l = seekbar_l.getProgress();
+
+                    rgb_r_v.setText("" + led_D_r);
+                    rgb_g_v.setText("" + led_D_g);
+                    rgb_b_v.setText("" + led_D_b);
+                    rgb_l_v.setText("" + led_D_l);
+                    rgb_v_v.setText("" + seekbar_v.getProgress());
+                    break;
+            }
+        }
+
+        @Override
+        public void onStartTrackingTouch(SeekBar arg0) {
+            // TODO Auto-generated method stub
+
+//            switch (arg0.getId()) {
+//                case R.id.seekBar1:
+//                case R.id.seekBar2:
+//                case R.id.seekBar3:
+//                case R.id.seekBar4:
+//                    break;
+//                case R.id.seekBar5:
+//
+//                    if (seekbar_v.getProgress() < 160) {
+//
+//                        Toast.makeText(QppActivity.this, "请拖动大于160", Toast.LENGTH_SHORT).show();
+//
+//                    }
+//                    break;
+//
+//            }
+        }
+
+
+        @Override
+        public void onStopTrackingTouch(SeekBar arg0) {
+            // TODO Auto-generated method stub
+            switch (arg0.getId()) {
+                case R.id.seekBar1://r
+                case R.id.seekBar2://g
+                case R.id.seekBar3://b
+                case R.id.seekBar4://l
+                    qppDataSend[2] = 'L';
+                    qppDataSend[3] = (byte) 0xa1;
+                    qppDataSend[4] = 0;
+                    qppDataSend[5] = 4;
+                    qppDataSend[6] = (byte) led_D_r;
+                    qppDataSend[7] = (byte) led_D_g;
+                    qppDataSend[8] = (byte) led_D_b;
+                    qppDataSend[9] = (byte) led_D_l;
+                    qppDataSend[10] = (byte) (256 - ((qppDataSend[2] +
+                            qppDataSend[3] +
+                            qppDataSend[4] +
+                            qppDataSend[5] +
+                            qppDataSend[6] +
+                            qppDataSend[7] +
+                            qppDataSend[8] +
+                            qppDataSend[9]) % 256));
+
+
+                    Log.d("lv", "lvxian LED");
+                    if (send_data_end == 0) {
+                        handlersend.post(runnableSend);
+                    }
+                    break;
+                case R.id.seekBar5://v
+
+                    if (seekbar_v.getProgress() < 160) {
+
+                        Toast.makeText(QppActivity.this, "请拖动大于160", Toast.LENGTH_SHORT).show();
+
+                    }
+
+                    break;
+            }
+
+        }
+
+    };
+
+    /*******************************************************************************************************************************
+     * 收起软键盘
+     ******************************************************************************************************************************/
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+
+        try {
+
+            InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+
+            return imm.hideSoftInputFromWindow(this.getCurrentFocus().getWindowToken(), 0);
+
+        } catch (Exception e) {
+
+            e.printStackTrace();
+            return false;
+
+        }
+
+    }
+
+    /*******************************************************************************************************************************
+     * 初始化函数
+     ******************************************************************************************************************************/
+    private boolean initialize() {
+        // For API level 18 and above, get a reference to BluetoothAdapter through BluetoothManager.
+        if (mBluetoothManager == null) {
+            mBluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
+            if (mBluetoothManager == null) {
+                Log.e(TAG, "Unable to initialize BluetoothManager.");
+                return false;
+            }
+        }
+        mBluetoothAdapter = mBluetoothManager.getAdapter();
+        if (mBluetoothAdapter == null) {
+            Log.e(TAG, "Unable to obtain a BluetoothAdapter.");
+            return false;
+        }
+        return true;
+    }
+
+    /*******************************************************************************************************************************
+     * 删除线程函数
+     ******************************************************************************************************************************/
+    private void clearHandler(Handler handler, Runnable runner) {
+        if (handler != null) {
+            handler.removeCallbacks(runner);
+            handler = null;
+        }
+    }
+
+    /**
+     * encoding data for sent data
+     **/
+    public byte[] encodeSentData() {
+
+        Log.d(TAG, "initial sending data");
+        int randdat = (int) (Math.random() * 65535);
+        qppDataSend[11] = (byte) ((randdat >> 1) & 0xff);
+        qppDataSend[12] = (byte) ((randdat >> 2) & 0xff);
+        qppDataSend[13] = (byte) ((randdat >> 3) & 0xff);
+        qppDataSend[14] = (byte) ((randdat >> 4) & 0xff);
+        qppDataSend[15] = (byte) ((randdat >> 5) & 0xff);
+        byte[] qppDataSen = new byte[qppDataSend.length];
+        BleKeyIns.cipher(qppDataSend, qppDataSen);
+        return qppDataSen;
+    }
+
+    /*******************************************************************************************************************************
+     * 更新界面电压和软件版本
+     ******************************************************************************************************************************/
+
+    private void setQppNotify(final byte[] b) {
+
+        final String logfiletime = refFormatNowDate() + ".debug.log";
+
+        runOnUiThread(new Runnable() {
+
+            byte[] t = b;
+            String log;
+
+            @Override
+            public void run() {
+//                logfiletime = refFormatNowDate()+".debug.log";
+
+                if (t.length == 16) {
+                    if ((t[0] == (byte) 0x55) && (t[1] == (byte) 0xaa)) {
+                        if ((t[2] == 'G') && (t[3] == (byte) 0xa1)) {//获取电量 & 电量状态
+                            if (((t[2] + t[3] + t[4] + t[5] + t[6] + t[7] + t[8] + t[9] + t[10]) & 0xff) == 0) {    //此处是电量信号
+                                bat_view.setText("电量:" + t[9] + " %");
+
+                                saveToSDCard(mypower, bat_view.getText().toString());
+
+                                if (t[7] != 0) bat_flag.setText("充电中");
+                                else bat_flag.setText("未充电");
+                            }
+
+                        } else if ((t[2] == 'G') && (t[3] == (byte) 0xa2)) { //此处是版本号好获取
+                            if (((t[2] + t[3] + t[4] + t[5] + t[6] + t[7] + t[8] + t[9] + t[10]) & 0xff) == 0) {
+                                int verss = (((int) t[9]) & 0xff) + ((((int) t[8]) << 8) & 0xff) + ((((int) t[7]) << 8) & 0xff);
+                                Version_s.setText("软件:" + verss);
+                                Version_h.setText("硬件:" + t[6]);
+                            }
+                            //Log.d("lv", "lvxian124 =:"+t[0]+","+t[1]+","+(char)t[2]+","+t[3]+","+t[4]+","+t[5]+","+t[6]+","+t[7]+","+t[8]+","+t[9]+","+t[10]);
+                            //Log.d("lv", "lvxian124 v ="+(int)t[6]+","+(int)t[9]);
+                        } else {// 发送数据后反馈回来的 ACK 数据
+
+                            Log.d(TAG, "run:get ack data");
+
+                        }
+                    }
+                }
+
+                log = t[0] + " " + t[1] + " " + (char) t[2] + " " + t[3] + " " + t[4] + " " + t[5] + " " + t[6] + " " + t[7] + " " + t[8] + " " + t[9] + " " + t[10];
+
+                Log.d(TAG, log);
+                savelogToSDCard(mylog, log);
+                savelogToSDCard(logfiletime, log);
+
+//                Log.d("lv", "lvxianack =:" + t[0] + "," + t[1] + "," + (char) t[2] + "," + t[3] + "," + t[4] + "," + t[5] + "," + t[6] + "," + t[7] + "," + t[8] + "," + t[9] + "," + t[10]);
+
+            }
+        });
+    }
+
+    /*******************************************************************************************************************************
+     * 检查连接 开发板是否成功函数
+     ******************************************************************************************************************************/
+    public boolean connect(final String address) {
+        if (mBluetoothAdapter == null || address == null) {
+            Log.w("Qn Dbg", "BluetoothAdapter not initialized or unspecified address.");
+            return false;
+        }
+        final BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(address);    // 获得 开发板地址
+        if (device == null) {
+            Log.w(TAG, "Device not found.  Unable to connect.");
+            return false;
+        }
+        //setting the autoConnect parameter to false.
+        //设置自动连接参数设置为false
+        mBluetoothGatt = device.connectGatt(this, false, mGattCallback);
+
+        Log.d(TAG, "Trying to create a new connection. Gatt: " + mBluetoothGatt);
+        return true;
+    }
+
+    ;
+
+    /*******************************************************************************************************************************
+     * 断开 开发板蓝牙函数
+     ******************************************************************************************************************************/
+    public void disconnect() {
+        if (mBluetoothAdapter == null || mBluetoothGatt == null) {
+            Log.w("Qn Dbg", "BluetoothAdapter not initialized");
+            return;
+        }
+        mBluetoothGatt.disconnect();
+    }
+
+    /*******************************************************************************************************************************
+     * 关闭 蓝牙 GATT函数
+     ******************************************************************************************************************************/
+    public void close() {
+        if (mBluetoothGatt != null) {
+            mBluetoothGatt.close();
+            mBluetoothGatt = null;
+        }
+    }
+
+    /*******************************************************************************************************************************
+     * 初始化界面，创建 Activity 时调用
+     ******************************************************************************************************************************/
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_qpp);
+        getActionBar().setDisplayHomeAsUpEnabled(true);
+
+        textDeviceName = (TextView) findViewById(R.id.text_device_name);
+        textDeviceAddress = (TextView) findViewById(R.id.text_device_address);
+
+        deviceName = getIntent().getExtras().getString(EXTRAS_DEVICE_NAME);
+        deviceAddress = getIntent().getExtras().getString(EXTRAS_DEVICE_ADDRESS);
+        textDeviceName.setText(deviceName);
+        textDeviceAddress.setText(deviceAddress);
+
+        bat_view = (TextView) findViewById(R.id.textView2);
+        bat_flag = (TextView) findViewById(R.id.textView1);
+
+        Version_s = (TextView) findViewById(R.id.textView18);
+        Version_h = (TextView) findViewById(R.id.textView17);
+
+        testresultforward = (TextView) findViewById(R.id.testtimeforward);
+        testresultbackward = (TextView) findViewById(R.id.testtimebackward);
+        testresultleft = (TextView) findViewById(R.id.testtimeleft);
+        testresultright = (TextView) findViewById(R.id.testtimeright);
+        testresultfb = (TextView) findViewById(R.id.testtimefb);
+        testresultcircle = (TextView) findViewById(R.id.testtimecircle);
+        overalltestPass = (TextView) findViewById(R.id.edit_text_pass);
+        overalltestFail = (TextView) findViewById(R.id.edit_text_fail);
+
+
+        rgb_r_v = (TextView) findViewById(R.id.textView3);
+        rgb_g_v = (TextView) findViewById(R.id.textView4);
+        rgb_b_v = (TextView) findViewById(R.id.textView5);
+        rgb_l_v = (TextView) findViewById(R.id.textView6);
+        rgb_v_v = (TextView) findViewById(R.id.textView16);
+
+        seekbar_r = (SeekBar) findViewById(R.id.seekBar1);
+        seekbar_g = (SeekBar) findViewById(R.id.seekBar2);
+        seekbar_b = (SeekBar) findViewById(R.id.seekBar3);
+        seekbar_l = (SeekBar) findViewById(R.id.seekBar4);
+        seekbar_v = (SeekBar) findViewById(R.id.seekBar5);
+
+        seekbar_r.setMax(255);
+        seekbar_g.setMax(255);
+        seekbar_b.setMax(255);
+        seekbar_l.setMax(255);
+        seekbar_l.setProgress(255);
+        seekbar_v.setMax(255);
+        seekbar_v.setProgress(255);
+
+
+        button_move_motor_z = (Button) findViewById(R.id.M1Z);
+        button_move_motor_f = (Button) findViewById(R.id.M1F);
+        button_move_motor_t = (Button) findViewById(R.id.button1);
+        button_LR_motor_z = (Button) findViewById(R.id.M2Z);
+        button_LR_motor_f = (Button) findViewById(R.id.M2F);
+        button_LR_motor_t = (Button) findViewById(R.id.button2);
+        button_motor_1_z = (Button) findViewById(R.id.M3Z);
+        button_motor_1_f = (Button) findViewById(R.id.M3F);
+        button_motor_1_t = (Button) findViewById(R.id.button7);
+        button_motor_2_z = (Button) findViewById(R.id.M4Z);
+        button_motor_2_f = (Button) findViewById(R.id.M4F);
+        button_motor_2_t = (Button) findViewById(R.id.button8);
+
+        button_play = (Button) findViewById(R.id.button3);
+        button_stop = (Button) findViewById(R.id.button4);
+        button_zt = (Button) findViewById(R.id.button5);
+        button_jx = (Button) findViewById(R.id.button6);
+        button_set_bat = (Button) findViewById(R.id.button9);
+        button_get_v = (Button) findViewById(R.id.button12);
+        button_fun_reset = (Button) findViewById(R.id.button10);
+        button_sys_reset = (Button) findViewById(R.id.button11);
+
+        edit_text_forward = (EditText) findViewById(R.id.edit_text_forward);
+        edit_text_back = (EditText) findViewById(R.id.edit_text_back);
+        edit_text_left = (EditText) findViewById(R.id.edit_text_left);
+        edit_text_right = (EditText) findViewById(R.id.edit_text_right);
+        edit_text_fb = (EditText) findViewById(R.id.edit_text_fb);
+        edit_text_circle = (EditText) findViewById(R.id.edit_text_circle);
+        edit_text_power = (EditText) findViewById(R.id.edit_text_power);
+
+        buttonfb2 = (Button) findViewById(R.id.buttonfb2);
+        buttonfb3 = (Button) findViewById(R.id.buttonfb3);
+        buttoncircle1 = (Button) findViewById(R.id.buttoncircle1);
+        buttoncircle2 = (Button) findViewById(R.id.buttoncircle2);
+        overalltestresult = (Button) findViewById(R.id.textViewresult);
+
+
+        mylog = refFormatNowDate() + ".log";
+
+
+        BleKeyIns.keyExpansionDefault();
+        sp1 = (Spinner) findViewById(R.id.spinner1);
+        ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(this, R.array.sound_qms, android.R.layout.simple_spinner_item);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        sp1.setAdapter(adapter);
+
+//		sp_bat = (Spinner)findViewById(R.id.spinner_time);
+//		ArrayAdapter<CharSequence> adapter1 = ArrayAdapter.createFromResource(this, R.array.bat_delay,android.R.layout.simple_spinner_item);
+//		adapter1.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+//		sp_bat.setAdapter(adapter1);
+
+
+        bat_view = (TextView) findViewById(R.id.textView2);
+        bat_view.setText("电量:未知");
+
+
+        if (!initialize())    //初始化蓝牙
+        {
+            Log.e(TAG, "Unable to initialize Bluetooth");
+            finish();
+        }
+
+
+        //====================================================================
+        // 设置回调函数，实现读取 开发板发过来的数据
+        QppApi.setCallback(new iQppCallback() {
+            @Override
+            public void onQppReceiveData(BluetoothGatt mBluetoothGatt, String qppUUIDForNotifyChar, byte[] qppData) {
+
+                Log.d("lv", "why need to 12");
+                if (qppData.length == 12) {
+                    initialed = true;
+                }
+
+                if (!dataRecvFlag) {
+                    handlerQppDataRate.postDelayed(runnableQppDataRate, 1000);
+                    dataRecvFlag = true;
+                }
+
+                if (qppSendDataState == false) {
+                    qppSendDataState = true;
+                    send_data_end = 0;
+                }
+
+                if ((qppData.length == 16) && initialed) {
+                    byte[] t = new byte[qppData.length];
+
+                    BleKeyIns.invCipher(qppData, t);
+                    setQppNotify(t);
+                }
+
+            }
+        });
+
+
+        seekbar_r.setOnSeekBarChangeListener(seekfun);
+        seekbar_g.setOnSeekBarChangeListener(seekfun);
+        seekbar_b.setOnSeekBarChangeListener(seekfun);
+        seekbar_l.setOnSeekBarChangeListener(seekfun);
+        seekbar_v.setOnSeekBarChangeListener(seekfun);
+
+
+        //setOnTouchListener
+        button_move_motor_z.setOnTouchListener(button_key);
+        button_move_motor_f.setOnTouchListener(button_key);
+        button_move_motor_t.setOnTouchListener(button_key);
+        button_LR_motor_z.setOnTouchListener(button_key);
+        button_LR_motor_f.setOnTouchListener(button_key);
+        button_LR_motor_t.setOnTouchListener(button_key);
+        button_motor_1_z.setOnTouchListener(button_key);
+        button_motor_1_f.setOnTouchListener(button_key);
+        button_motor_1_t.setOnTouchListener(button_key);
+        button_motor_2_z.setOnTouchListener(button_key);
+        button_motor_2_f.setOnTouchListener(button_key);
+        button_motor_2_t.setOnTouchListener(button_key);
+
+        button_play.setOnTouchListener(button_key);
+        button_stop.setOnTouchListener(button_key);
+        button_zt.setOnTouchListener(button_key);
+        button_jx.setOnTouchListener(button_key);
+        button_set_bat.setOnTouchListener(button_key);
+        button_fun_reset.setOnTouchListener(button_key);
+        button_sys_reset.setOnTouchListener(button_key);
+        button_get_v.setOnTouchListener(button_key);
+        buttonfb2.setOnTouchListener(button_key);
+        buttonfb3.setOnTouchListener(button_key);
+        buttoncircle1.setOnTouchListener(button_key);
+        buttoncircle2.setOnTouchListener(button_key);
+        overalltestresult.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+
+                int a = 0;
+
+                a = processData(mylog, edit_text_forward);
+
+                if (a < 0) {
+                    Toast.makeText(QppActivity.this, "log文件不存在", Toast.LENGTH_LONG).show();
+                    return;
+                }
+                Log.d(TAG, String.valueOf(a) + "qq");
+
+
+                overalltestPass.setText(String.valueOf(a));
+//               overalltestPass.setText(String.valueOf(5));
+
+                if (edit_text_forward.getText().toString().length() == 0) {
+
+                    overalltestFail.setText(String.valueOf(1 - a));
+//
+                }else{
+                    overalltestFail.setText(String.valueOf(Integer.parseInt(edit_text_forward.getText().toString()) - a));
+                }
+            }
+        });
+
+
+        edit_text_forward.addTextChangedListener(mtextwatcher);
+        edit_text_back.addTextChangedListener(btextwatcher);
+        edit_text_left.addTextChangedListener(ltextwatcher);
+        edit_text_right.addTextChangedListener(rtextwatcher);
+        edit_text_fb.addTextChangedListener(fbtextwatcher);
+        edit_text_circle.addTextChangedListener(ctextwatcher);
+
+    }
+
+    /*******************************************************************************************************************************
+     * 写入电量到SD card
+     ******************************************************************************************************************************/
+
+    public void saveToSDCard(String filename, String content) {
+
+//        String text = bat_view.getText().toString();
+
+        String current_time_text = content + "   " + String.valueOf(refFormatNowDate()) + "\n";
+
+
+        boolean success = true;
+
+        if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
+
+            try {
+                File file = new File(Environment.getExternalStorageDirectory().getCanonicalPath(), filename);
+
+//                if (file.exists()) {
+//
+//                    file.delete();
+//                }
+
+                FileOutputStream outputStream = new FileOutputStream(file, true);
+//                outputStream.flush();
+                outputStream.write(current_time_text.getBytes("utf-8"));
+
+            } catch (IOException e) {
+                success = false;
+
+                e.printStackTrace();
+            }
+
+        }
+        Toast.makeText(QppActivity.this, success == true ? "电量写入SD卡文件成功" : "电量写入SD卡文件失败", Toast.LENGTH_SHORT).show();
+    }
+
+    public synchronized void savelogToSDCard(String filename, String content) {
+
+//        String text = bat_view.getText().toString();
+
+        String current_time_text = content + " " + String.valueOf(refFormatNowDate()) + "\n";
+
+
+        boolean success = true;
+
+        if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
+
+            try {
+                File file = new File(Environment.getExternalStorageDirectory().getCanonicalPath(), filename);
+
+//                if (file.exists()) {
+//
+//                    file.delete();
+//                }
+
+                FileOutputStream outputStream = new FileOutputStream(file, true);
+//                outputStream.flush();
+                outputStream.write(current_time_text.getBytes("utf-8"));
+
+            } catch (IOException e) {
+                success = false;
+
+                e.printStackTrace();
+            }
+
+        }
+//        SystemClock.sleep(5000);
+//        Toast.makeText(QppActivity.this, success == true ? "写入SD卡文件成功" : "写入SD卡文件失败", Toast.LENGTH_SHORT).show();
+    }
+
+    /*******************************************************************************************************************************
+     * 写入电量到手机内存
+     ******************************************************************************************************************************/
+    public void writeToAppMemory(String filename, String content) {
+
+//        String text = bat_view.getText().toString();
+
+        String current_time_text = content + String.valueOf(refFormatNowDate()) + "\n";
+
+
+        FileOutputStream openFileOutput = null;
+
+        boolean success = true;
+
+        try {
+
+            //使用openFileOutput()函数,直接在/data/data/包名/files/目录下创建文件
+            openFileOutput = openFileOutput(filename, Context.MODE_APPEND);  //append写文件
+            openFileOutput.write(current_time_text.getBytes("utf-8"));
+            openFileOutput.flush();
+
+        } catch (IOException e) {
+
+            success = false;
+            e.printStackTrace();
+        } finally {
+
+            if (openFileOutput != null) {
+                try {
+                    openFileOutput.close();
+                    openFileOutput = null;
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        Toast.makeText(QppActivity.this, success == true ? "电量写入内存文件成功" : "电量写入内存文件失败", Toast.LENGTH_SHORT).show();
+
+    }
+
+    /*******************************************************************************************************************************
+     * 转换日期格式
+     *
+     *
+     ******************************************************************************************************************************/
+    public String refFormatNowDate() {
+        Date nowTime = new Date(System.currentTimeMillis());
+        SimpleDateFormat sdFormatter = new SimpleDateFormat("yyyy年-MM月dd日-HH时mm分ss秒");
+        String retStrFormatNowDate = sdFormatter.format(nowTime);
+        return retStrFormatNowDate;
+    }
+
+    /*******************************************************************************************************************************
+     * 创建菜单选项
+     ******************************************************************************************************************************/
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        // Inflate the menu; this adds items to the action bar if it is present.
+        getMenuInflater().inflate(R.menu.qpp, menu);
+
+        if (mConnected) {
+            menu.findItem(R.id.menu_connect).setVisible(false);
+            menu.findItem(R.id.menu_disconnect).setVisible(true);
+            qppSendDataState = false;
+        } else {
+            menu.findItem(R.id.menu_connect).setVisible(true);
+            menu.findItem(R.id.menu_disconnect).setVisible(false);
+            qppSendDataState = false;
+        }
+        return true;
+    }
+
+    /*******************************************************************************************************************************
+     * 在选项中 选择
+     ******************************************************************************************************************************/
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()) {
+            case R.id.menu_connect:
+                connect(deviceAddress);
+                qppSendDataState = false;
+                return true;
+            case R.id.menu_disconnect:
+                disconnect();
+                qppSendDataState = true;
+                return true;
+            case android.R.id.home:
+                onBackPressed();
+                return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    /*******************************************************************************************************************************
+     * 用户交互时被调用
+     ******************************************************************************************************************************/
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (!mConnected) {
+            invalidateOptionsMenu();    //初始化菜单
+            connect(deviceAddress);        //连接蓝牙地址
+        }
+        qppSendDataState = false;
+    }
+
+    /*******************************************************************************************************************************
+     *  Activity 交换时保持数据 用
+     ******************************************************************************************************************************/
+    @Override
+    protected void onPause() {
+        super.onPause();
+    }
+
+    /*******************************************************************************************************************************
+     *  Activity 销毁时调用
+     ******************************************************************************************************************************/
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        dataRecvFlag = false;
+        mConnected = false;
+        isInitialize = false;
+        qppSendDataState = false;
+        clearHandler(handlerQppDataRate, runnableQppDataRate);
+        clearHandler(handlersend, runnableSend);
+        close();
+    }
+
+    final class StopThread implements Runnable {
+        private void QppSendNextData() {
+            if (initialed == false) {
+                return;
+            }
+            byte[] qppDataSen = encodeSentData();
+            Log.d(TAG, "this is a good one");
+
+            if (!QppApi.qppSendData(mBluetoothGatt, qppDataSen)) {
+                Log.e(TAG, "send data failed");
+                return;
+            }
+        }
+
+        public void run() {
+
+            mExit = true;
+
+            QppSendNextData();
+
+            SystemClock.sleep(800);
+
+            mExit = false;
+        }
+    }
+
+    final class FBStopThread implements Runnable {
+        private void QppSendNextData() {
+            if (initialed == false) {
+                return;
+            }
+            byte[] qppDataSen = encodeSentData();
+            Log.d(TAG, "this is a good one");
+
+            if (!QppApi.qppSendData(mBluetoothGatt, qppDataSen)) {
+                Log.e(TAG, "send data failed");
+                return;
+            }
+        }
+
+        public void run() {
+
+            mExit = true;
+
+            QppSendNextData();
+
+            SystemClock.sleep(6000);
+
+            mExit = false;
+        }
+    }
+
+    final class CircleStopThread implements Runnable {
+        private void QppSendNextData() {
+            if (initialed == false) {
+                return;
+            }
+            byte[] qppDataSen = encodeSentData();
+            Log.d(TAG, "this is a good one");
+
+            if (!QppApi.qppSendData(mBluetoothGatt, qppDataSen)) {
+                Log.e(TAG, "send data failed");
+                return;
+            }
+        }
+
+        public void run() {
+
+            mExit = true;
+
+            QppSendNextData();
+
+            SystemClock.sleep(1000);
+
+            mExit = false;
+        }
+    }
+
+    final class PowerThread implements Runnable {
+        private void QppSendNextData() {
+            if (initialed == false) {
+                return;
+            }
+
+            byte[] qppDataSen = encodeSentData();
+
+            Log.d(TAG, "forward wheel");
+
+
+            if (edit_text_power.getText().toString().length() == 0) {
+                QppApi.qppSendData(mBluetoothGatt, qppDataSen);
+                return;
+
+            } else {
+                int i = Integer.parseInt(edit_text_power.getText().toString());
+
+                for (int a = 0; a < i; a++) {
+                    Log.d(TAG, "getPowerlevel" + " " + String.valueOf(a));
+
+                    QppApi.qppSendData(mBluetoothGatt, qppDataSen);
+
+                    SystemClock.sleep(60000);//每隔1分钟抓取电量
+
+                }
+            }
+        }
+
+        @Override
+        public void run() {
+
+            QppSendNextData();
+
+        }
+    }
+
+    final class ForwardThread implements Runnable {
+
+//        public volatile boolean flag = true;
+
+        private void QppSendNextData() {
+            if (initialed == false) {
+                return;
+            }
+
+            byte[] qppDataSen = encodeSentData();
+
+            Log.d(TAG, "forward wheel");
+
+
+            if (edit_text_forward.getText().toString().length() == 0) {
+                QppApi.qppSendData(mBluetoothGatt, qppDataSen);
+                return;
+
+            } else {
+                int i = Integer.parseInt(edit_text_forward.getText().toString());
+
+
+                for (int a = 0; a < i; a++) {
+                    Log.d(TAG, "getPowerlevel" + " " + String.valueOf(mExit));
+                    if (mExit == false) {
+
+                        QppApi.qppSendData(mBluetoothGatt, qppDataSen);
+                        SystemClock.sleep(t1);
+                    } else {
+                        return;
+                    }
+
+
+                }
+            }
+        }
+
+        @Override
+        public void run() {
+
+            QppSendNextData();
+
+        }
+    }
+
+    final class BackwardThread implements Runnable {
+        private void QppSendNextData() {
+            if (initialed == false) {
+                return;
+            }
+
+            byte[] qppDataSen = encodeSentData();
+            Log.d(TAG, "backward wheel");
+
+            if (edit_text_back.getText().toString().length() == 0) {
+                QppApi.qppSendData(mBluetoothGatt, qppDataSen);
+                return;
+
+            } else {
+                int i = Integer.parseInt(edit_text_back.getText().toString());
+
+                for (int a = 0; a < i; a++) {
+                    if (mExit == false) {
+                        QppApi.qppSendData(mBluetoothGatt, qppDataSen);
+                        SystemClock.sleep(t1);
+
+                    } else {
+                        return;
+                    }
+                }
+            }
+        }
+
+        public void run() {
+            QppSendNextData();
+        }
+    }
+
+    final class RightThread implements Runnable {
+        private void QppSendNextData() {
+            if (initialed == false) {
+                return;
+            }
+
+            byte[] qppDataSen = encodeSentData();
+            Log.d(TAG, "backward wheel");
+
+            if (edit_text_left.getText().toString().length() == 0) {
+                QppApi.qppSendData(mBluetoothGatt, qppDataSen);
+                return;
+
+            } else {
+                int i = Integer.parseInt(edit_text_left.getText().toString());
+
+                for (int a = 0; a < i; a++) {
+                    if (mExit == false) {
+                        QppApi.qppSendData(mBluetoothGatt, qppDataSen);
+                        SystemClock.sleep(t1);
+
+                    } else {
+                        return;
+                    }
+
+                }
+            }
+
+//			Log.e(TAG,"send data failed");
+//			return;
+//
+        }
+
+        public void run() {
+            QppSendNextData();
+        }
+    }
+
+    final class LeftThread implements Runnable {
+        private void QppSendNextData() {
+            if (initialed == false) {
+                return;
+            }
+
+            byte[] qppDataSen = encodeSentData();
+            Log.d(TAG, "backward wheel");
+
+            if (edit_text_right.getText().toString().length() == 0) {
+                QppApi.qppSendData(mBluetoothGatt, qppDataSen);
+                return;
+
+            } else {
+                int i = Integer.parseInt(edit_text_right.getText().toString());
+
+                for (int a = 0; a < i; a++) {
+                    if (mExit == false) {
+                        QppApi.qppSendData(mBluetoothGatt, qppDataSen);
+                        SystemClock.sleep(t1);
+
+                    } else {
+                        return;
+                    }
+
+                }
+            }
+
+        }
+
+        public void run() {
+            QppSendNextData();
+        }
+    }
+
+    final class ForwardBackwardThread implements Runnable {
+        private void QppSendNextData() {
+            if (initialed == false) {
+                return;
+            }
+            int randdat = (int) (Math.random() * 65535);
+            byte[] qppDataSendforward = {0x55, (byte) 0xaa, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+            byte[] qppDataSendbackward = {0x55, (byte) 0xaa, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+            qppDataSendforward[2] = 'M';
+            qppDataSendforward[3] = (byte) 0xa1;
+            qppDataSendforward[4] = 0;
+            qppDataSendforward[5] = 4;
+            qppDataSendforward[6] = 0;
+            qppDataSendforward[7] = 0;
+            qppDataSendforward[8] = (byte) 0xaa;
+            qppDataSendforward[9] = (byte) seekbar_v.getProgress();
+            qppDataSendforward[10] = (byte) (256 - ((qppDataSendforward[2] +
+                    qppDataSendforward[3] +
+                    qppDataSendforward[4] +
+                    qppDataSendforward[5] +
+                    qppDataSendforward[6] +
+                    qppDataSendforward[7] +
+                    qppDataSendforward[8] +
+                    qppDataSendforward[9]) % 256));
+            qppDataSendforward[11] = (byte) ((randdat >> 1) & 0xff);
+            qppDataSendforward[12] = (byte) ((randdat >> 2) & 0xff);
+            qppDataSendforward[13] = (byte) ((randdat >> 3) & 0xff);
+            qppDataSendforward[14] = (byte) ((randdat >> 4) & 0xff);
+            qppDataSendforward[15] = (byte) ((randdat >> 5) & 0xff);
+
+
+            qppDataSendbackward[2] = 'M';
+            qppDataSendbackward[3] = (byte) 0xa1;
+            qppDataSendbackward[4] = 0;
+            qppDataSendbackward[5] = 4;
+            qppDataSendbackward[6] = 0;
+            qppDataSendbackward[7] = 0;
+            qppDataSendbackward[8] = (byte) 0x55;
+            qppDataSendbackward[9] = (byte) seekbar_v.getProgress();
+            qppDataSendbackward[10] = (byte) (256 - ((qppDataSendbackward[2] +
+                    qppDataSendbackward[3] +
+                    qppDataSendbackward[4] +
+                    qppDataSendbackward[5] +
+                    qppDataSendbackward[6] +
+                    qppDataSendbackward[7] +
+                    qppDataSendbackward[8] +
+                    qppDataSendbackward[9]) % 256));
+            qppDataSendbackward[11] = (byte) ((randdat >> 1) & 0xff);
+            qppDataSendbackward[12] = (byte) ((randdat >> 2) & 0xff);
+            qppDataSendbackward[13] = (byte) ((randdat >> 3) & 0xff);
+            qppDataSendbackward[14] = (byte) ((randdat >> 4) & 0xff);
+            qppDataSendbackward[15] = (byte) ((randdat >> 5) & 0xff);
+
+            byte[] qppDataSenforward = new byte[qppDataSendforward.length];
+            byte[] qppDataSenbackward = new byte[qppDataSendbackward.length];
+
+            BleKeyIns.cipher(qppDataSendforward, qppDataSenforward);
+            BleKeyIns.cipher(qppDataSendbackward, qppDataSenbackward);
+
+            Log.d(TAG, "forwardbackward wheel");
+
+            if (edit_text_fb.getText().toString().length() == 0) {
+                Log.d(TAG, "backward wheel1");
+                QppApi.qppSendData(mBluetoothGatt, qppDataSenforward);
+                SystemClock.sleep(t2);
+                Log.d(TAG, "backward wheel2");
+                QppApi.qppSendData(mBluetoothGatt, qppDataSenbackward);
+
+                return;
+
+            } else {
+                int i = Integer.parseInt(edit_text_fb.getText().toString());
+
+                for (int a = 0; a < i; a++) {
+
+                    if (mExit == false) {
+                        Log.d(TAG, "backward wheel3");
+                        QppApi.qppSendData(mBluetoothGatt, qppDataSenforward);
+                        SystemClock.sleep(t2);
+                        Log.d(TAG, "backward wheel4");
+                        QppApi.qppSendData(mBluetoothGatt, qppDataSenbackward);
+                        SystemClock.sleep(t2);
+
+                    } else {
+                        return;
+                    }
+                }
+            }
+
+        }
+
+        public void run() {
+            QppSendNextData();
+        }
+
+    }
+
+    final class CircleThread implements Runnable {
+        private void QppSendNextData() {
+            if (initialed == false) {
+                return;
+            }
+            int randdat = (int) (Math.random() * 65535);
+            byte[] qppDataSendforward = {0x55, (byte) 0xaa, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+            byte[] qppDataSendright = {0x55, (byte) 0xaa, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+            qppDataSendforward[2] = 'M';
+            qppDataSendforward[3] = (byte) 0xa1;
+            qppDataSendforward[4] = 0;
+            qppDataSendforward[5] = 4;
+            qppDataSendforward[6] = 0;
+            qppDataSendforward[7] = 0;
+            qppDataSendforward[8] = (byte) 0xaa;
+            qppDataSendforward[9] = (byte) seekbar_v.getProgress();
+            qppDataSendforward[10] = (byte) (256 - ((qppDataSendforward[2] +
+                    qppDataSendforward[3] +
+                    qppDataSendforward[4] +
+                    qppDataSendforward[5] +
+                    qppDataSendforward[6] +
+                    qppDataSendforward[7] +
+                    qppDataSendforward[8] +
+                    qppDataSendforward[9]) % 256));
+            qppDataSendforward[11] = (byte) ((randdat >> 1) & 0xff);
+            qppDataSendforward[12] = (byte) ((randdat >> 2) & 0xff);
+            qppDataSendforward[13] = (byte) ((randdat >> 3) & 0xff);
+            qppDataSendforward[14] = (byte) ((randdat >> 4) & 0xff);
+            qppDataSendforward[15] = (byte) ((randdat >> 5) & 0xff);
+
+
+            qppDataSendright[2] = 'M';
+            qppDataSendright[3] = (byte) 0xa2;
+            qppDataSendright[4] = 0;
+            qppDataSendright[5] = 4;
+            qppDataSendright[6] = 0;
+            qppDataSendright[7] = 0;
+            qppDataSendright[8] = (byte) 0xaa;
+            qppDataSendright[9] = (byte) seekbar_v.getProgress();
+            qppDataSendright[10] = (byte) (256 - ((qppDataSendright[2] +
+                    qppDataSendright[3] +
+                    qppDataSendright[4] +
+                    qppDataSendright[5] +
+                    qppDataSendright[6] +
+                    qppDataSendright[7] +
+                    qppDataSendright[8] +
+                    qppDataSendright[9]) % 256));
+            qppDataSendright[11] = (byte) ((randdat >> 1) & 0xff);
+            qppDataSendright[12] = (byte) ((randdat >> 2) & 0xff);
+            qppDataSendright[13] = (byte) ((randdat >> 3) & 0xff);
+            qppDataSendright[14] = (byte) ((randdat >> 4) & 0xff);
+            qppDataSendright[15] = (byte) ((randdat >> 5) & 0xff);
+
+            byte[] qppDataSenforward = new byte[qppDataSendforward.length];
+            byte[] qppDataSenright = new byte[qppDataSendright.length];
+
+            BleKeyIns.cipher(qppDataSendforward, qppDataSenforward);
+            BleKeyIns.cipher(qppDataSendright, qppDataSenright);
+
+            Log.d(TAG, "Cirle wheel");
+
+            if (edit_text_circle.getText().toString().length() == 0) {
+                Log.d(TAG, "rightforward wheel1");
+                QppApi.qppSendData(mBluetoothGatt, qppDataSenright);
+                Log.d(TAG, "rightforward wheel2");
+                SystemClock.sleep(50);
+                QppApi.qppSendData(mBluetoothGatt, qppDataSenforward);
+                return;
+
+            } else {
+                int i = Integer.parseInt(edit_text_circle.getText().toString());
+
+                for (int a = 0; a < i; a++) {
+
+                    if (mExit == false) {
+                        Log.d(TAG, "rightforward wheel3");
+                        QppApi.qppSendData(mBluetoothGatt, qppDataSenright);
+                        SystemClock.sleep(50);
+                        Log.d(TAG, "rightforward wheel4");
+                        QppApi.qppSendData(mBluetoothGatt, qppDataSenforward);
+                        SystemClock.sleep(900);
+
+                    } else {
+                        return;
+                    }
+                }
+
+            }
+
+//			Log.e(TAG,"send data failed");
+//			return;
+//
+        }
+
+        public void run() {
+            QppSendNextData();
+        }
+
+    }
+
+    public int processData(String filename,EditText v) {
+        Log.d(TAG, "ff");
+        int i = 0;
+//        StringBuffer sb = new StringBuffer("");
+        File file;
+        String str;
+
+        if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
+
+            Log.d(TAG, "fe");
+
+            try {
+                file = new File(Environment.getExternalStorageDirectory().getCanonicalPath(), filename);
+                if (!file.exists()){
+
+                    return -1;
+                }
+
+//                int t = Integer.parseInt(v.getText().toString());
+                FileReader reader = new FileReader(file);
+                BufferedReader br = new BufferedReader(reader);
+                Log.d(TAG, "fq");
+
+                switch (v.getId()) {
+
+                    case R.id.edit_text_forward:
+
+                    while ((str = br.readLine()) != null) {
+                        String[] p = str.split("\\s+");//用空格分
+                        Log.d(TAG, String.valueOf(qppDataSend[9]));
+                        Log.d(TAG, String.valueOf(qppDataSend[10]));
+
+
+                        if ((p[0].equals("85")) && (p[1].equals("-86")) && (p[2].equals("M")) && (p[3].equals("-95")) && (p[4].equals("0")) && (p[5].equals("4")) && (p[6].equals("0")) && (p[7].equals("0")) && (p[8].equals("-86")) && (p[9].equals(String.valueOf(qppDataSend[9]))) && (p[10].equals(String.valueOf(qppDataSend[10])))) {
+                            Log.d(TAG, "kaishi");
+                            Log.d(TAG, String.valueOf(i));
+                            i++;
+                            Log.d(TAG, "shizhi");
+
+                        }
+
+                    }
+                    break;
+
+                    case R.id.edit_text_back:
+
+                        while ((str = br.readLine()) != null) {
+                            String[] p = str.split("\\s+");//用空格分
+                            Log.d(TAG, String.valueOf(qppDataSend[9]));
+                            Log.d(TAG, String.valueOf(qppDataSend[10]));
+
+
+                            if ((p[0].equals("85")) && (p[1].equals("-86")) && (p[2].equals("M")) && (p[3].equals("-95")) && (p[4].equals("0")) && (p[5].equals("4")) && (p[6].equals("0")) && (p[7].equals("0")) && (p[8].equals("-86")) && (p[9].equals(String.valueOf(qppDataSend[9]))) && (p[10].equals(String.valueOf(qppDataSend[10])))) {
+                                Log.d(TAG, "kaishi");
+                                Log.d(TAG, String.valueOf(i));
+                                i++;
+                                Log.d(TAG, "shizhi");
+
+                            }
+
+                        }
+
+
+                }
+
+
+
+                br.close();
+                reader.close();
+
+            } catch (Exception e) {
+
+                e.printStackTrace();
+            }
+        }
+
+        return i;
+    }
+
+
+}
